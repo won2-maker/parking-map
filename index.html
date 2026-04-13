@@ -28,9 +28,6 @@ kakao.maps.load(function(){
 
   // 기준점
   var cm=new kakao.maps.Marker({map:map,position:center});
-  new kakao.maps.InfoWindow({
-    content:'<div style="padding:4px 8px;font-size:11px;font-weight:700;color:#ef4444;white-space:nowrap">📍 분석 지점</div>'
-  }).open(map,cm);
 
   // 반경 원
   new kakao.maps.Circle({
@@ -61,7 +58,7 @@ kakao.maps.load(function(){
     var overlay=new kakao.maps.CustomOverlay({
       map:map,
       position:new kakao.maps.LatLng(lot.lat,lot.lng),
-      content:'<div onclick="window._selectLot('+idx+')" style="cursor:pointer;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;transform:translate(-50%,-50%)">'+(hasRev&&sz>=20?FW(rev):'')+'</div>',
+      content:'<div onclick="window._selectLot('+idx+')" style="cursor:pointer;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;position:relative;left:-50%;top:-50%">'+(hasRev&&sz>=20?FW(rev):'')+'</div>',
       yAnchor:0.5,xAnchor:0.5
     });
 
