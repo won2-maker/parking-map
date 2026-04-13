@@ -13,19 +13,20 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif}
 <div id="map"></div>
 <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=c320a15a913f1ca4499435481f4b897e&autoload=false"></script>
 <script>
-// URL 파라미터에서 데이터 읽기
 var params=new URLSearchParams(window.location.search);
 var lat=parseFloat(params.get('lat'))||37.5665;
 var lng=parseFloat(params.get('lng'))||126.978;
 var radius=parseInt(params.get('radius'))||500;
 var lotsJson=params.get('lots')||'[]';
 
+var FW=function(n){if(!n||n===0)return'-';if(n>=1e8)return(n/1e8).toFixed(1)+'억';if(n>=1e4)return(n/1e4).toFixed(1)+'만';return n.toLocaleString()};
+
 kakao.maps.load(function(){
   var center=new kakao.maps.LatLng(lat,lng);
   var map=new kakao.maps.Map(document.getElementById('map'),{center:center,level:4});
   map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
 
-  // 기준점 마커
+  // 기준점
   var cm=new kakao.maps.Marker({map:map,position:center});
   new kakao.maps.InfoWindow({
     content:'<div style="padding:4px 8px;font-size:11px;font-weight:700;color:#ef4444;white-space:nowrap">📍 분석 지점</div>'
@@ -38,45 +39,78 @@ kakao.maps.load(function(){
     fillColor:'#6366f1',fillOpacity:0.06
   }).setMap(map);
 
-  // 주차장 마커
+  // 주차장 마커 (매출 볼륨 = 원 크기)
   var lots=[];
   try{lots=JSON.parse(decodeURIComponent(lotsJson));}catch(e){}
-  var curIW=null;
+  var maxRev=1;
+  lots.forEach(function(l){if((l.rev||0)>maxRev)maxRev=l.rev;});
 
-  lots.forEach(function(lot){
+  var curIW=null;
+  lots.forEach(function(lot,idx){
     if(!lot.lat||!lot.lng)return;
-    var hasRev=(lot.rev||0)>0;
-    var mk=new kakao.maps.Marker({
+    var rev=lot.rev||0;
+    var hasRev=rev>0;
+
+    // 매출 볼륨에 따라 원 크기 (10~40px)
+    var sz=hasRev?Math.max(10,Math.min(40,Math.round((rev/maxRev)*40))):8;
+
+    // 커스텀 오버레이 (원형)
+    var color=hasRev?'rgba(99,102,241,0.6)':'rgba(200,200,200,0.5)';
+    var border=hasRev?'2px solid rgba(67,56,202,0.8)':'1px solid #ccc';
+
+    var overlay=new kakao.maps.CustomOverlay({
       map:map,
       position:new kakao.maps.LatLng(lot.lat,lot.lng),
-      image:new kakao.maps.MarkerImage(
-        hasRev?'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png'
-              :'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png',
-        new kakao.maps.Size(hasRev?24:20,hasRev?35:29)
-      )
+      content:'<div onclick="window._selectLot('+idx+')" style="cursor:pointer;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;transform:translate(-50%,-50%)">'+(hasRev&&sz>=20?FW(rev):'')+'</div>',
+      yAnchor:0.5,xAnchor:0.5
     });
 
-    var FW=function(n){if(!n||n===0)return'-';if(n>=1e8)return(n/1e8).toFixed(1)+'억';if(n>=1e4)return(n/1e4).toFixed(1)+'만';return n.toLocaleString()};
+    // 이름 라벨
+    new kakao.maps.CustomOverlay({
+      map:map,
+      position:new kakao.maps.LatLng(lot.lat,lot.lng),
+      content:'<div style="font-size:10px;font-weight:600;color:#1e1b4b;text-shadow:0 0 3px #fff,0 0 3px #fff;pointer-events:none;transform:translateY(-'+(sz/2+12)+'px)">'+lot.name.slice(0,10)+'</div>',
+      yAnchor:0.5
+    });
 
-    var content='<div style="padding:8px 12px;font-size:12px;min-width:180px;line-height:1.6;font-family:-apple-system,Malgun Gothic,sans-serif">'
-      +'<b style="color:#4338ca">'+lot.name+'</b><br>'
+    // 클릭 시 인포윈도우
+    var iwContent='<div style="padding:10px 14px;font-size:12px;min-width:200px;line-height:1.7;font-family:-apple-system,Malgun Gothic,sans-serif">'
+      +'<b style="color:#4338ca;font-size:13px">'+lot.name+'</b><br>'
       +'📏 '+lot.dist+'m · 🅿️ '+(lot.spots||'?')+'면<br>';
     if(hasRev){
-      content+='<span style="color:#6366f1">월정기 '+FW(lot.mRev)+'</span>'
-        +' · <span style="color:#f59e0b">기타 '+FW(lot.oRev)+'</span><br>'
-        +'<b style="color:#dc2626">합계 '+FW(lot.rev)+'</b>';
+      iwContent+='<span style="color:#6366f1;font-weight:600">월정기 '+FW(lot.mRev)+'</span><br>'
+        +'<span style="color:#f59e0b;font-weight:600">기타 '+FW(lot.oRev)+'</span><br>'
+        +'<b style="color:#dc2626;font-size:13px">합계 '+FW(rev)+'</b>';
     } else {
-      content+='<span style="color:#9ca3af">매출 데이터 없음</span>';
+      iwContent+='<span style="color:#9ca3af">매출 데이터 없음</span>';
     }
-    content+='</div>';
+    iwContent+='</div>';
 
-    var iw=new kakao.maps.InfoWindow({content:content});
-    kakao.maps.event.addListener(mk,'click',function(){
-      if(curIW)curIW.close();
-      iw.open(map,mk);curIW=iw;
-    });
-    kakao.maps.event.addListener(mk,'mouseover',function(){iw.open(map,mk);});
-    kakao.maps.event.addListener(mk,'mouseout',function(){if(curIW!==iw)iw.close();});
+    var iw=new kakao.maps.InfoWindow({content:iwContent});
+    lot._iw=iw;
+    lot._mk=new kakao.maps.Marker({position:new kakao.maps.LatLng(lot.lat,lot.lng),map:null}); // 숨겨진 마커 (인포윈도우 앵커용)
+    lot._mk.setMap(map);
+    lot._mk.setVisible(false);
+  });
+
+  // 부모 웹앱에서 호출 가능한 함수
+  window._selectLot=function(idx){
+    if(curIW)curIW.close();
+    var lot=lots[idx];
+    if(!lot||!lot._iw)return;
+    lot._iw.open(map,lot._mk);
+    curIW=lot._iw;
+    // 부모에 알림
+    if(window.parent&&window.parent.postMessage){
+      window.parent.postMessage({type:'lotClick',idx:idx,name:lot.name},'*');
+    }
+  };
+
+  // 부모에서 메시지 받기 (선택 동기화)
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='selectLot'){
+      window._selectLot(e.data.idx);
+    }
   });
 });
 </script>
