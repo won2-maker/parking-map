@@ -40,9 +40,18 @@ var lotsJson=params.get('lots')||'[]';
 
 var FW=function(n){if(!n||n===0)return'-';if(n>=1e8)return(n/1e8).toFixed(1)+'억';if(n>=1e4)return(n/1e4).toFixed(1)+'만';return n.toLocaleString()};
 
+// sessionStorage 키: 분석 기준점별로 마지막 지도 상태 저장
+var SK='pkMap_'+lat.toFixed(4)+'_'+lng.toFixed(4);
+var saved=null;
+try{saved=JSON.parse(sessionStorage.getItem(SK));}catch(e){}
+
 kakao.maps.load(function(){
-  var center=new kakao.maps.LatLng(lat,lng);
-  var map=new kakao.maps.Map(document.getElementById('map'),{center:center,level:4});
+  // 저장된 위치가 있으면 복원, 없으면 기준점으로 초기화
+  var initLat=saved?saved.lat:lat;
+  var initLng=saved?saved.lng:lng;
+  var initLevel=saved?saved.level:4;
+  var center=new kakao.maps.LatLng(lat,lng); // 원(circle) 기준점은 항상 분석지점
+  var map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(initLat,initLng),level:initLevel});
   map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
 
   new kakao.maps.Marker({map:map,position:center});
@@ -81,13 +90,6 @@ kakao.maps.load(function(){
   var maxRev=1;
   lots.forEach(function(l){if((l.rev||0)>maxRev)maxRev=l.rev;});
 
-  // 주차장 좌표 평균으로 지도 중심 이동 (분석 기준점이 오른쪽으로 치우치는 현상 방지)
-  var validLots=lots.filter(function(l){return l.lat&&l.lng;});
-  if(validLots.length>0){
-    var sumLat=0,sumLng=0;
-    validLots.forEach(function(l){sumLat+=l.lat;sumLng+=l.lng;});
-    map.setCenter(new kakao.maps.LatLng(sumLat/validLots.length, sumLng/validLots.length));
-  }
 
   var curPopup=null;
 
@@ -148,6 +150,22 @@ kakao.maps.load(function(){
     lot._popup=popup;
     lot._pos=new kakao.maps.LatLng(lot.lat,lot.lng);
   });
+
+  // 지도 이동/줌 후 현재 위치 저장 → iframe 리로드 시 복원
+  kakao.maps.event.addListener(map,'idle',function(){
+    var c=map.getCenter();
+    try{sessionStorage.setItem(SK,JSON.stringify({lat:c.getLat(),lng:c.getLng(),level:map.getLevel()}));}catch(e){}
+  });
+
+  // lots 로드 후 저장된 위치 없으면 주차장 평균 중심으로 이동
+  if(!saved){
+    var validLots=lots.filter(function(l){return l.lat&&l.lng;});
+    if(validLots.length>0){
+      var sLat=0,sLng=0;
+      validLots.forEach(function(l){sLat+=l.lat;sLng+=l.lng;});
+      map.setCenter(new kakao.maps.LatLng(sLat/validLots.length,sLng/validLots.length));
+    }
+  }
 
   // 지도 클릭 시 팝업 닫기
   kakao.maps.event.addListener(map,'click',function(){
