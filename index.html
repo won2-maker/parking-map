@@ -26,17 +26,42 @@ kakao.maps.load(function(){
   var map=new kakao.maps.Map(document.getElementById('map'),{center:center,level:4});
   map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
 
-  // 기준점
-  var cm=new kakao.maps.Marker({map:map,position:center});
+  // 기준점 마커
+  new kakao.maps.Marker({map:map,position:center});
 
-  // 반경 원
-  new kakao.maps.Circle({
-    center:center,radius:radius,
-    strokeWeight:2,strokeColor:'#6366f1',strokeOpacity:0.6,strokeStyle:'dashed',
-    fillColor:'#6366f1',fillOpacity:0.06
-  }).setMap(map);
+  // ── 반경 원 + 거리 라벨 ──
+  var ringRadii=[100,300,500];
+  if(radius>0&&ringRadii.indexOf(radius)<0) ringRadii.push(radius);
+  ringRadii.sort(function(a,b){return a-b;});
 
-  // 주차장 마커 (매출 볼륨 = 원 크기)
+  ringRadii.forEach(function(r){
+    var isMain=(r===radius);
+    new kakao.maps.Circle({
+      center:center, radius:r,
+      strokeWeight:isMain?2:1,
+      strokeColor:'#6366f1',
+      strokeOpacity:isMain?0.65:0.35,
+      strokeStyle:'dashed',
+      fillColor:'#6366f1',
+      fillOpacity:isMain?0.06:0.02
+    }).setMap(map);
+
+    // 라벨: 원 오른쪽 45도 방향 (겹침 방지)
+    // 위도 1° ≈ 111000m, 경도 1° ≈ 111000m·cos(lat)
+    var dLat=r/111000*0.707;
+    var dLng=r/(111000*Math.cos(lat*Math.PI/180))*0.707;
+    new kakao.maps.CustomOverlay({
+      map:map,
+      position:new kakao.maps.LatLng(lat+dLat, lng+dLng),
+      content:'<div style="font-size:10px;font-weight:700;color:#4338ca;'
+        +'background:rgba(255,255,255,0.9);padding:2px 6px;border-radius:10px;'
+        +'border:1px solid rgba(99,102,241,0.4);pointer-events:none;white-space:nowrap;'
+        +'box-shadow:0 1px 3px rgba(0,0,0,0.15)">'+r+'m</div>',
+      xAnchor:0, yAnchor:1
+    });
+  });
+
+  // ── 주차장 마커 ──
   var lots=[];
   try{lots=JSON.parse(decodeURIComponent(lotsJson));}catch(e){}
   var maxRev=1;
@@ -48,66 +73,80 @@ kakao.maps.load(function(){
     var rev=lot.rev||0;
     var hasRev=rev>0;
 
-    // 매출 볼륨에 따라 원 크기 (10~40px)
-    var sz=hasRev?Math.max(10,Math.min(40,Math.round((rev/maxRev)*40))):8;
+    // 원 크기: 최소 18px, 최대 46px
+    var sz=hasRev?Math.max(18,Math.min(46,Math.round((rev/maxRev)*46))):16;
+    // 히트 영역: 최소 36px (터치/클릭 쉽게)
+    var hitSz=Math.max(sz,36);
 
-    // 커스텀 오버레이 (원형)
-    var color=hasRev?'rgba(99,102,241,0.6)':'rgba(200,200,200,0.5)';
-    var border=hasRev?'2px solid rgba(67,56,202,0.8)':'1px solid #ccc';
+    var color=hasRev?'rgba(99,102,241,0.8)':'rgba(170,170,170,0.55)';
+    var border=hasRev?'2px solid rgba(67,56,202,0.95)':'1px solid #aaa';
 
-    var overlay=new kakao.maps.CustomOverlay({
-      map:map,
-      position:new kakao.maps.LatLng(lot.lat,lot.lng),
-      content:'<div onclick="window._selectLot('+idx+')" style="cursor:pointer;width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:'+border+';display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;position:relative;left:-50%;top:-50%">'+(hasRev&&sz>=20?FW(rev):'')+'</div>',
-      yAnchor:0.5,xAnchor:0.5
-    });
-
-    // 이름 라벨
     new kakao.maps.CustomOverlay({
       map:map,
       position:new kakao.maps.LatLng(lot.lat,lot.lng),
-      content:'<div style="font-size:10px;font-weight:600;color:#1e1b4b;text-shadow:0 0 3px #fff,0 0 3px #fff;pointer-events:none;transform:translateY(-'+(sz/2+12)+'px)">'+lot.name.slice(0,10)+'</div>',
-      yAnchor:0.5
+      content:'<div onclick="window._selectLot('+idx+')" '
+        +'style="cursor:pointer;width:'+hitSz+'px;height:'+hitSz+'px;'
+        +'border-radius:50%;display:flex;align-items:center;justify-content:center;'
+        +'background:transparent">'
+        +'<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;'
+        +'background:'+color+';border:'+border+';'
+        +'display:flex;align-items:center;justify-content:center;'
+        +'font-size:8px;color:#fff;font-weight:700;line-height:1">'
+        +(hasRev&&sz>=24?FW(rev):'')
+        +'</div></div>',
+      xAnchor:0.5, yAnchor:0.5
     });
 
-    // 클릭 시 인포윈도우
-    var iwContent='<div style="padding:10px 14px;font-size:12px;min-width:200px;line-height:1.7;font-family:-apple-system,Malgun Gothic,sans-serif">'
+    // 이름 라벨 (원 위)
+    new kakao.maps.CustomOverlay({
+      map:map,
+      position:new kakao.maps.LatLng(lot.lat,lot.lng),
+      content:'<div style="font-size:10px;font-weight:600;color:#1e1b4b;'
+        +'text-shadow:0 0 3px #fff,0 0 4px #fff,0 0 4px #fff;'
+        +'pointer-events:none;white-space:nowrap;'
+        +'transform:translateY(-'+(hitSz/2+8)+'px)">'+lot.name.slice(0,10)+'</div>',
+      xAnchor:0.5, yAnchor:0.5
+    });
+
+    // 인포윈도우
+    var iwContent='<div style="padding:10px 14px;font-size:12px;min-width:200px;'
+      +'line-height:1.8;font-family:-apple-system,Malgun Gothic,sans-serif">'
       +'<b style="color:#4338ca;font-size:13px">'+lot.name+'</b><br>'
       +'📏 '+lot.dist+'m · 🅿️ '+(lot.spots||'?')+'면<br>';
     if(hasRev){
       iwContent+='<span style="color:#6366f1;font-weight:600">월정기 '+FW(lot.mRev)+'</span><br>'
         +'<span style="color:#f59e0b;font-weight:600">기타 '+FW(lot.oRev)+'</span><br>'
         +'<b style="color:#dc2626;font-size:13px">합계 '+FW(rev)+'</b>';
-    } else {
+    }else{
       iwContent+='<span style="color:#9ca3af">매출 데이터 없음</span>';
     }
     iwContent+='</div>';
 
-    var iw=new kakao.maps.InfoWindow({content:iwContent});
+    var iw=new kakao.maps.InfoWindow({content:iwContent,disableAutoPan:true});
+    var mk=new kakao.maps.Marker({position:new kakao.maps.LatLng(lot.lat,lot.lng),map:null});
+    mk.setMap(map);
+    mk.setVisible(false);
     lot._iw=iw;
-    lot._mk=new kakao.maps.Marker({position:new kakao.maps.LatLng(lot.lat,lot.lng),map:null}); // 숨겨진 마커 (인포윈도우 앵커용)
-    lot._mk.setMap(map);
-    lot._mk.setVisible(false);
+    lot._mk=mk;
+    lot._pos=new kakao.maps.LatLng(lot.lat,lot.lng);
   });
 
-  // 부모 웹앱에서 호출 가능한 함수
+  // ── 클릭 핸들러 ──
   window._selectLot=function(idx){
     if(curIW)curIW.close();
     var lot=lots[idx];
     if(!lot||!lot._iw)return;
+    // 먼저 지도 중심을 해당 주차장으로 이동 → 지도 밀림 방지
+    map.setCenter(lot._pos);
     lot._iw.open(map,lot._mk);
     curIW=lot._iw;
-    // 부모에 알림
     if(window.parent&&window.parent.postMessage){
       window.parent.postMessage({type:'lotClick',idx:idx,name:lot.name},'*');
     }
   };
 
-  // 부모에서 메시지 받기 (선택 동기화)
   window.addEventListener('message',function(e){
-    if(e.data&&e.data.type==='selectLot'){
-      window._selectLot(e.data.idx);
-    }
+    if(e.data&&e.data.type==='selectLot') window._selectLot(e.data.idx);
   });
 });
 </script>
