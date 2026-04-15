@@ -150,8 +150,8 @@ kakao.maps.load(function(){
     if(curPopup) curPopup.setMap(null);
     var lot=lots[idx];
     if(!lot||!lot._popup)return;
-    // 지도 중심 이동 (밀림 없이 해당 주차장이 중앙에)
-    map.setCenter(lot._pos);
+    // 부드럽게 해당 주차장으로 이동
+    map.panTo(lot._pos);
     lot._popup.setMap(map);
     curPopup=lot._popup;
     if(window.parent&&window.parent.postMessage){
