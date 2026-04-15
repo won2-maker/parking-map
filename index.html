@@ -81,6 +81,14 @@ kakao.maps.load(function(){
   var maxRev=1;
   lots.forEach(function(l){if((l.rev||0)>maxRev)maxRev=l.rev;});
 
+  // 모든 주차장 + 기준점을 포함하는 bounding box로 지도 초기 뷰 설정
+  if(lots.length>0){
+    var bounds=new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(lat,lng));
+    lots.forEach(function(l){if(l.lat&&l.lng)bounds.extend(new kakao.maps.LatLng(l.lat,l.lng));});
+    map.setBounds(bounds, 60); // 60px 여백
+  }
+
   var curPopup=null;
 
   lots.forEach(function(lot,idx){
